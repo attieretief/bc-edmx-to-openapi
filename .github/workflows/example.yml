@@ -1,0 +1,68 @@
+name: Example - Convert EDMX to OpenAPI
+
+# This is an example workflow showing how to use the EDMX to OpenAPI converter action
+# Copy this file to your repository's .github/workflows/ directory to get started
+
+on:
+  # Trigger when api.xml file changes
+  push:
+    branches: [ main, develop ]
+    paths: [ '**/api.xml' ]
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      input_path:
+        description: 'Path to EDMX file (e.g., docs/api.xml)'
+        required: false
+        default: 'docs/api.xml'
+      output_path:
+        description: 'Path for output files (e.g., docs/api-openapi.json)'
+        required: false
+        default: 'docs/api-openapi.json'
+      api_name:
+        description: 'API name for URLs'
+        required: false
+        default: 'MyBusinessCentralAPI'
+
+jobs:
+  convert-edmx:
+    name: Convert EDMX to Enhanced OpenAPI
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Convert EDMX to OpenAPI
+      id: convert
+      uses: attieretief/bc-edmx-to-openapi@v1
+      with:
+        input-path: ${{ github.event.inputs.input_path || 'docs/api.xml' }}
+        output-path: ${{ github.event.inputs.output_path || 'docs/api-openapi.json' }}
+        api-name: ${{ github.event.inputs.api_name || 'MyBusinessCentralAPI' }}
+    
+    - name: Show conversion results
+      run: |
+        echo "✅ Conversion completed!"
+        echo "📄 Generated OpenAPI file: ${{ steps.convert.outputs.output-file }}"
+        echo "🌐 Generated HTML viewer: ${{ steps.convert.outputs.html-file }}"
+        echo "📊 File size: ${{ steps.convert.outputs.file-size }}"
+        echo ""
+        echo "The enhanced OpenAPI file is now ready for use with:"
+        echo "- Interactive HTML viewer (included)"
+        echo "- Swagger UI"
+        echo "- Redoc"
+        echo "- Scalar"
+        echo "- Postman"
+        echo "- Or any other OpenAPI-compatible tool"
+    
+    - name: Commit generated files (optional)
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add ${{ steps.convert.outputs.output-file }}
+        git add ${{ steps.convert.outputs.html-file }}
+        git diff --staged --quiet || git commit -m "🤖 Auto-update OpenAPI documentation from EDMX"
+        git push

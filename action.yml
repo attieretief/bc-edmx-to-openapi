@@ -1,0 +1,52 @@
+name: 'EDMX to Enhanced OpenAPI Converter'
+description: 'Convert Business Central EDMX files to enhanced OpenAPI 3.1.1 format with BC-specific configurations'
+author: 'attieretief'
+
+branding:
+  icon: 'file-text'
+  color: 'blue'
+
+inputs:
+  input-path:
+    description: 'Path to the input EDMX file relative to repository root'
+    required: true
+  output-path:
+    description: 'Path where the output OpenAPI JSON file should be saved relative to repository root'
+    required: true
+  api-name:
+    description: 'API name for URLs and documentation (e.g., "produceLinc", "myApp")'
+    required: false
+  title:
+    description: 'Custom API title'
+    required: false
+  description:
+    description: 'Custom API description'
+    required: false
+  api-version:
+    description: 'API version for URLs (e.g., "v1.0", "v2.0")'
+    required: false
+    default: 'v1.0'
+  tenant-placeholder:
+    description: 'Tenant ID placeholder for OAuth URLs (e.g., "{tenant_id}")'
+    required: false
+    default: '{tenant_id}'
+
+outputs:
+  output-file:
+    description: 'Path to the generated OpenAPI JSON file'
+  html-file:
+    description: 'Path to the generated HTML documentation viewer'
+  file-size:
+    description: 'Size of the generated file'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.input-path }}
+    - ${{ inputs.output-path }}
+    - ${{ inputs.api-name }}
+    - ${{ inputs.title }}
+    - ${{ inputs.description }}
+    - ${{ inputs.api-version }}
+    - ${{ inputs.tenant-placeholder }}
