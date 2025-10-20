@@ -300,6 +300,7 @@ if eval $PYTHON_CMD; then
         layout: 'modern',
         showToolbar: 'never',
         theme: 'bluePlanet',
+        persistAuth: true,
       })
     </script>
   </body>
