@@ -275,133 +275,34 @@ if eval $PYTHON_CMD; then
             OPENAPI_FILENAME=$(basename "$OUTPUT_FILE")
             
             cat > "$HTML_OUTPUT_FILE" << 'EOF'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Documentation</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        .header {
-            background: #2563eb;
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 2rem;
-        }
-        .header p {
-            margin: 10px 0 0 0;
-            opacity: 0.9;
-        }
-        .viewer-options {
-            padding: 20px;
-            border-bottom: 1px solid #e5e7eb;
-            text-align: center;
-        }
-        .viewer-button {
-            display: inline-block;
-            margin: 0 10px;
-            padding: 12px 24px;
-            background: #2563eb;
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: 500;
-            transition: background-color 0.2s;
-        }
-        .viewer-button:hover {
-            background: #1d4ed8;
-        }
-        .scalar-container {
-            height: 80vh;
-            border: none;
-        }
-        .info {
-            padding: 20px;
-            background: #f8fafc;
-            color: #64748b;
-            text-align: center;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>API Documentation</h1>
-            <p>Interactive Business Central API Documentation</p>
-        </div>
-        
-        <div class="viewer-options">
-            <a href="#" onclick="loadScalar()" class="viewer-button">📖 Interactive Docs (Scalar)</a>
-            <a href="#" onclick="loadSwagger()" class="viewer-button">🔧 Swagger UI</a>
-            <a href="#" onclick="loadRedoc()" class="viewer-button">📋 ReDoc</a>
-            <a href="OPENAPI_FILENAME" class="viewer-button" download>💾 Download OpenAPI JSON</a>
-        </div>
-        
-        <div id="api-viewer" class="scalar-container">
-            <div class="info">
-                <p>Choose a documentation viewer above to explore the API interactively.</p>
-                <p>The <strong>Interactive Docs (Scalar)</strong> option provides the best experience for testing API endpoints.</p>
-            </div>
-        </div>
-    </div>
-
+<!doctype html>
+<html>
+  <head>
+    <title>API Reference</title>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <!-- Load the Script -->
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+    <!-- Initialize the Scalar API Reference -->
     <script>
-        const openApiFile = 'OPENAPI_FILENAME';
-        
-        function loadScalar() {
-            document.getElementById('api-viewer').innerHTML = `
-                <script id="api-reference" data-url="./${openApiFile}"><\/script>
-                <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@latest"><\/script>
-            `;
-        }
-        
-        function loadSwagger() {
-            document.getElementById('api-viewer').innerHTML = `
-                <div id="swagger-ui"></div>
-                <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@latest/swagger-ui.css" />
-                <script src="https://unpkg.com/swagger-ui-dist@latest/swagger-ui-bundle.js"><\/script>
-                <script>
-                    SwaggerUIBundle({
-                        url: './${openApiFile}',
-                        dom_id: '#swagger-ui',
-                        presets: [
-                            SwaggerUIBundle.presets.apis,
-                            SwaggerUIBundle.presets.standalone
-                        ]
-                    });
-                <\/script>
-            `;
-        }
-        
-        function loadRedoc() {
-            document.getElementById('api-viewer').innerHTML = `
-                <redoc spec-url="./${openApiFile}"></redoc>
-                <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"><\/script>
-            `;
-        }
-        
-        // Load Scalar by default
-        setTimeout(loadScalar, 100);
+      Scalar.createApiReference('#app', {
+        url: './OPENAPI_FILENAME',
+        proxyUrl: 'https://proxy.scalar.com',
+        darkMode: false,
+        documentDownloadType: 'none',
+        hideClientButton: true,
+        hideModels: true,
+        layout: 'modern',
+        showToolbar: 'never',
+        theme: 'bluePlanet',
+      })
     </script>
-</body>
+  </body>
 </html>
 EOF
             
