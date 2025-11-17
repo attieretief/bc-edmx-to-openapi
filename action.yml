@@ -27,9 +27,12 @@ inputs:
     required: false
     default: 'v1.0'
   tenant-placeholder:
-    description: 'Tenant ID placeholder for OAuth URLs (e.g., "{tenant_id}")'
+    description: 'Tenant ID placeholder for OAuth URLs (e.g., "{tenant_id}", "{{tenant_id}}")'
     required: false
     default: '{tenant_id}'
+  repo-path:
+    description: 'Path to the Business Central repository containing AL source files for description enhancement'
+    required: false
 
 outputs:
   output-file:
@@ -50,3 +53,4 @@ runs:
     - ${{ inputs.description }}
     - ${{ inputs.api-version }}
     - ${{ inputs.tenant-placeholder }}
+    - ${{ inputs.repo-path }}

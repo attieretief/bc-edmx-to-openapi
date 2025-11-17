@@ -19,8 +19,10 @@ import sys
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
+import re
+import glob
 from pathlib import Path
-from typing import Dict, Any, List, Set
+from typing import Dict, Any, List, Set, Optional
 
 
 class EdmxToEnhancedOpenApiConverter:
@@ -29,14 +31,20 @@ class EdmxToEnhancedOpenApiConverter:
     def __init__(self):
         self.edmx_capabilities = {}  # Store EntitySet capability restrictions
         self.entity_type_capabilities = {}  # Store EntityType capability restrictions
+        self.al_entities = {}  # Store AL API entity metadata: entity_name -> {source_file, fields}
         
     def convert(self, edmx_file: str, output_file: str, title: str = None, description: str = None, 
-                api_name: str = None, api_version: str = None, tenant_placeholder: str = None) -> None:
+                api_name: str = None, api_version: str = None, tenant_placeholder: str = None,
+                repo_path: str = None) -> None:
         """Convert EDMX file to enhanced OpenAPI JSON."""
         print(f"Converting {edmx_file} to {output_file}")
         
         # Step 0: Parse EDMX file for capability annotations
         self._parse_edmx_capabilities(edmx_file)
+        
+        # Step 0.5: Parse AL source files for entity descriptions if repo path provided
+        if repo_path:
+            self._parse_al_api_objects(repo_path)
         
         # Step 1: Use odata-openapi3 to generate base OpenAPI file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
@@ -112,7 +120,10 @@ class EdmxToEnhancedOpenApiConverter:
         # Remove unused create/update schema variants
         self._remove_unused_schema_variants(spec)
         
-        print("Applied enhancements: info, servers, security, securitySchemes, company parameter optimization, navigation path cleanup, system audit field removal, EDMX capability enforcement, and unused schema cleanup")
+        # Enhance schema descriptions using AL source metadata
+        self._enhance_schema_descriptions(spec)
+        
+        print("Applied enhancements: info, servers, security, securitySchemes, company parameter optimization, navigation path cleanup, system audit field removal, EDMX capability enforcement, unused schema cleanup, and AL description enhancement")
     
     def _build_enhanced_info_section(self, title: str = None, description: str = None, api_name: str = None) -> Dict[str, Any]:
         """Build the enhanced info section of the OpenAPI spec."""
@@ -509,6 +520,147 @@ This interactive testing feature allows you to explore the API functionality and
             print(f"Warning: Could not parse EDMX capabilities: {e}")
             # Continue without capability enforcement if parsing fails
 
+    def _parse_al_api_objects(self, repo_path: str) -> None:
+        """Parse AL API objects (pages and queries) to extract entity names and field descriptions."""
+        try:
+            repo_path = Path(repo_path)
+            if not repo_path.exists():
+                print(f"Warning: Repository path '{repo_path}' does not exist")
+                return
+                
+            # Find all AL files in Pages and queries directories
+            al_files = []
+            for pattern in ['Pages/**/*.al', 'queries/**/*.al']:
+                al_files.extend(glob.glob(str(repo_path / pattern), recursive=True))
+            
+            print(f"Found {len(al_files)} AL files to scan for API objects")
+            
+            for al_file in al_files:
+                try:
+                    self._parse_single_al_file(al_file)
+                except Exception as e:
+                    print(f"Warning: Error parsing AL file '{al_file}': {e}")
+                    continue
+            
+            print(f"Parsed {len(self.al_entities)} AL API entities")
+            
+            # Show summary of found entities
+            if self.al_entities:
+                print("\nAL API entities found:")
+                for entity_name, entity_data in self.al_entities.items():
+                    source_file = Path(entity_data['source_file']).name
+                    field_count = len(entity_data['fields'])
+                    object_type = entity_data['object_type']
+                    print(f"  • {entity_name} ({object_type}) - {field_count} fields from {source_file}")
+            
+        except Exception as e:
+            print(f"Warning: Could not parse AL API objects: {e}")
+            # Continue without AL descriptions if parsing fails
+
+    def _parse_single_al_file(self, al_file: str) -> None:
+        """Parse a single AL file to extract API entity metadata."""
+        with open(al_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Check if this is an API object
+        is_api_page = 'PageType = API;' in content
+        is_api_query = 'QueryType = API;' in content
+        
+        if not (is_api_page or is_api_query):
+            return
+        
+        # Extract EntityName
+        entity_name_match = re.search(r'EntityName\s*=\s*[\'"]([^\'"]+)[\'"]', content)
+        if not entity_name_match:
+            return
+            
+        entity_name = entity_name_match.group(1)
+        
+        # Parse fields/columns and their descriptions
+        fields = {}
+        
+        if is_api_page:
+            # Parse page fields - more robust pattern to handle multi-line field definitions
+            # Look for field(...) { ... Description = '...'; ... }
+            field_pattern = r'field\(([^;]+);\s*[^)]*\)\s*\{[^}]*?Description\s*=\s*[\'"]([^\'"]*)[\'"]'
+            for match in re.finditer(field_pattern, content, re.DOTALL):
+                field_name = match.group(1).strip()
+                description = match.group(2).strip()
+                
+                fields[field_name] = description
+                
+        elif is_api_query:
+            # Parse query columns - similar pattern for columns
+            column_pattern = r'column\(([^;]+);\s*[^)]*\)\s*\{[^}]*?Description\s*=\s*[\'"]([^\'"]*)[\'"]'
+            for match in re.finditer(column_pattern, content, re.DOTALL):
+                column_name = match.group(1).strip()
+                description = match.group(2).strip()
+                
+                fields[column_name] = description
+        
+        if fields:
+            self.al_entities[entity_name] = {
+                'source_file': al_file,
+                'fields': fields,
+                'object_type': 'page' if is_api_page else 'query'
+            }
+            print(f"Found API entity '{entity_name}' with {len(fields)} described fields in {Path(al_file).name}")
+
+    def _enhance_schema_descriptions(self, spec: Dict[str, Any]) -> None:
+        """Enhance OpenAPI schema field descriptions using AL source descriptions."""
+        if 'components' not in spec or 'schemas' not in spec['components']:
+            return
+            
+        if not self.al_entities:
+            print("No AL entities found - skipping description enhancement")
+            return
+            
+        enhanced_count = 0
+        schema_count = 0
+        
+        for schema_name, schema_def in spec['components']['schemas'].items():
+            # Skip if not a Business Central entity schema
+            if not schema_name.startswith('Microsoft.NAV.'):
+                continue
+                
+            # Extract entity name from schema name
+            # Schema names like: Microsoft.NAV.thirdPartyTransaction, Microsoft.NAV.thirdPartyTransaction-create
+            entity_name = schema_name
+            if entity_name.startswith('Microsoft.NAV.'):
+                entity_name = entity_name[len('Microsoft.NAV.'):]
+            
+            # Remove -create or -update suffix
+            if entity_name.endswith('-create') or entity_name.endswith('-update'):
+                entity_name = entity_name.rsplit('-', 1)[0]
+            
+            # Check if we have AL metadata for this entity
+            if entity_name not in self.al_entities:
+                continue
+                
+            al_entity = self.al_entities[entity_name]
+            al_fields = al_entity['fields']
+            schema_count += 1
+            
+            # Create case-insensitive field mapping for better matching
+            al_fields_lower = {k.lower(): (k, v) for k, v in al_fields.items()}
+            
+            # Update schema properties with descriptions
+            if 'properties' in schema_def:
+                for prop_name, prop_def in schema_def['properties'].items():
+                    # Try exact match first, then case-insensitive match
+                    if prop_name in al_fields:
+                        prop_def['description'] = al_fields[prop_name]
+                        enhanced_count += 1
+                    elif prop_name.lower() in al_fields_lower:
+                        original_key, description = al_fields_lower[prop_name.lower()]
+                        prop_def['description'] = description
+                        enhanced_count += 1
+        
+        if enhanced_count > 0:
+            print(f"Enhanced {enhanced_count} field descriptions across {schema_count} schemas using AL source metadata")
+        else:
+            print("No field descriptions were enhanced (no matching fields found)")
+
     def _enforce_edmx_capabilities(self, spec: Dict[str, Any]) -> None:
         """Remove HTTP methods from paths that violate EDMX capability annotations."""
         if 'paths' not in spec or not self.edmx_capabilities:
@@ -790,12 +942,14 @@ Examples:
   python edmx_to_enhanced_openapi.py api.xml api.json --title "My API" --description "Custom API description"
   python edmx_to_enhanced_openapi.py api.xml api.json --api-name "MyApp" --api-version "v1.0"
   python edmx_to_enhanced_openapi.py api.xml api.json --tenant-placeholder "{{tenant_id}}"
+  python edmx_to_enhanced_openapi.py api.xml api.json --repo-path "/path/to/bc/repo" --api-name "MyApp"
 
 Requirements:
   - npm install -g odata-openapi
 
 This script first uses the odata-openapi3 tool to convert the EDMX to a base OpenAPI file,
-then enhances it with Business Central specific configurations.
+then enhances it with Business Central specific configurations. If --repo-path is provided,
+it will also enhance field descriptions using AL source file descriptions.
         """
     )
     
@@ -806,6 +960,7 @@ then enhances it with Business Central specific configurations.
     parser.add_argument('--api-name', help='API name for URLs and documentation (e.g., "produceLinc", "myApp")')
     parser.add_argument('--api-version', help='API version for URLs (e.g., "v1.0", "v2.0")')
     parser.add_argument('--tenant-placeholder', help='Tenant ID placeholder for OAuth URLs (e.g., "{tenant_id}", "{{tenant_id}}")')
+    parser.add_argument('--repo-path', help='Path to the Business Central repository containing AL source files for description enhancement')
     
     args = parser.parse_args()
     
@@ -834,7 +989,8 @@ then enhances it with Business Central specific configurations.
             args.description,
             args.api_name,
             args.api_version,
-            args.tenant_placeholder
+            args.tenant_placeholder,
+            args.repo_path
         )
     except Exception as e:
         print(f"Error during conversion: {e}")

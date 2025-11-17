@@ -50,16 +50,18 @@ show_usage() {
     echo "  --api-name NAME             API name for URLs (e.g., 'produceLinc', 'myApp')"
     echo "  --api-version VERSION       API version for URLs (e.g., 'v1.0', 'v2.0')"
     echo "  --tenant-placeholder PLACEHOLDER  Tenant placeholder for OAuth (e.g., '{tenant_id}')"
+    echo "  --repo-path PATH            Path to BC repository for AL description enhancement"
     echo "  --no-html                   Skip HTML generation"
     echo ""
     echo "Examples:"
     echo "  $0 docs/api.xml docs/api_enhanced.json"
     echo "  $0 docs/api.xml docs/api_enhanced.json --title \"My Custom API\""
     echo "  $0 docs/api.xml docs/api_enhanced.json --api-name \"ProduceLinc\" --api-version \"v1.0\""
+    echo "  $0 docs/api.xml docs/api_enhanced.json --repo-path \"/path/to/bc/repo\" --api-name \"MyApp\""
     echo ""
     echo "GitHub Actions Mode:"
     echo "  When running in GitHub Actions, arguments are passed positionally:"
-    echo "  $0 \$INPUT_PATH \$OUTPUT_PATH \$API_NAME \$TITLE \$DESCRIPTION \$API_VERSION \$TENANT_PLACEHOLDER"
+    echo "  $0 \$INPUT_PATH \$OUTPUT_PATH \$API_NAME \$TITLE \$DESCRIPTION \$API_VERSION \$TENANT_PLACEHOLDER \$REPO_PATH"
     echo ""
 }
 
@@ -71,6 +73,7 @@ DESCRIPTION=""
 API_NAME=""
 API_VERSION=""
 TENANT_PLACEHOLDER=""
+REPO_PATH=""
 GENERATE_HTML=true
 
 # Parse arguments based on environment
@@ -86,6 +89,7 @@ if is_github_actions; then
     DESCRIPTION="$5"
     API_VERSION="$6"
     TENANT_PLACEHOLDER="$7"
+    REPO_PATH="$8"
     
     # Convert to absolute paths within the workspace
     WORKSPACE="${GITHUB_WORKSPACE:-/github/workspace}"
@@ -142,6 +146,10 @@ else
                     ;;
                 --tenant-placeholder)
                     TENANT_PLACEHOLDER="$2"
+                    shift 2
+                    ;;
+                --repo-path)
+                    REPO_PATH="$2"
                     shift 2
                     ;;
                 --no-html)
@@ -235,6 +243,11 @@ fi
 if [ -n "$TENANT_PLACEHOLDER" ] && [ "$TENANT_PLACEHOLDER" != "null" ]; then
     PYTHON_CMD="$PYTHON_CMD --tenant-placeholder \"$TENANT_PLACEHOLDER\""
     print_status "Tenant Placeholder: $TENANT_PLACEHOLDER"
+fi
+
+if [ -n "$REPO_PATH" ] && [ "$REPO_PATH" != "null" ]; then
+    PYTHON_CMD="$PYTHON_CMD --repo-path \"$REPO_PATH\""
+    print_status "Repository Path: $REPO_PATH"
 fi
 
 print_status "Starting conversion..."
