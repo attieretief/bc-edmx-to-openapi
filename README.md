@@ -5,12 +5,13 @@ A GitHub Action that converts Business Central EDMX (Entity Data Model XML) file
 ## Features
 
 - 🔄 Converts EDMX files to OpenAPI 3.1.1 JSON format
-- � **Generates interactive HTML documentation viewer**
-- �🏢 Adds Business Central-specific server configurations
+- 📄 **Generates interactive HTML documentation viewer**
+- 🏢 Adds Business Central-specific server configurations
 - 🔐 Includes OAuth2 security schemes for Business Central
 - 📝 Enhances documentation with custom titles and descriptions
 - 🎯 Configurable API names and versions for URL generation
 - 📊 Provides file size and line count outputs
+- 🔗 **AL Source Integration** for enhanced field descriptions
 
 ## Usage
 
@@ -25,6 +26,22 @@ A GitHub Action that converts Business Central EDMX (Entity Data Model XML) file
     api-name: 'MyAPI'
 ```
 
+### Enhanced Usage with AL Source Integration
+
+When your repository contains Business Central AL source files, you can enable enhanced field descriptions by providing the repository path:
+
+```yaml
+- name: Convert EDMX to OpenAPI with AL Descriptions
+  uses: attieretief/bc-edmx-to-openapi@v1
+  with:
+    input-path: 'docs/api.xml'
+    output-path: 'docs/api.json'
+    api-name: 'MyAPI'
+    title: 'My Business Central API'
+    description: 'Enhanced API documentation with field descriptions from AL source'
+    repo-path: '.'  # Use current repository root
+```
+
 ## Inputs
 
 | Input | Description | Required | Default |
@@ -36,6 +53,7 @@ A GitHub Action that converts Business Central EDMX (Entity Data Model XML) file
 | `description` | Custom API description | ❌ | |
 | `api-version` | API version for URLs (e.g., "v1.0", "v2.0") | ❌ | `v1.0` |
 | `tenant-placeholder` | Tenant ID placeholder for OAuth URLs | ❌ | `{tenant_id}` |
+| `repo-path` | Path to Business Central repository containing AL source files for enhanced field descriptions | ❌ | |
 
 ## Outputs
 
@@ -81,8 +99,9 @@ jobs:
       uses: attieretief/bc-edmx-to-openapi@v1
       with:
         input-path: ${{ github.event.inputs.input_path || 'docs/api.xml' }}
-        output-path: ${{ github.event.inputs.output_path || 'docs/api.json }}
+        output-path: ${{ github.event.inputs.output_path || 'docs/api.json' }}
         api-name: ${{ github.event.inputs.api_name || 'BusinessCentral' }}
+        repo-path: '.'  # Enable AL source integration for enhanced descriptions
     
     - name: Display conversion results
       run: |
@@ -108,6 +127,44 @@ The action takes your EDMX file and:
 5. **URL Configuration**: Uses your API name and version for proper URL generation
 6. **Clean Structure**: Removes unused schema variants and optimizes the output
 7. **🆕 Interactive HTML Viewer**: Creates an `index.html` file with multiple documentation viewers
+8. **🆕 AL Source Integration**: Enhances field descriptions using Business Central AL source files when `repo-path` is provided
+
+### AL Source Integration for Enhanced Descriptions
+
+When you provide the `repo-path` parameter, the action will:
+
+- **Parse AL API Objects**: Scans `Pages/**/*.al` and `queries/**/*.al` files in your repository
+- **Extract Field Descriptions**: Finds API pages (`PageType = API`) and queries (`QueryType = API`) with `EntityName` properties
+- **Match Field Descriptions**: Maps AL field/column descriptions to OpenAPI schema properties
+- **Enhance Schema Documentation**: Automatically adds meaningful field descriptions from your AL source code
+
+This feature is particularly valuable for Business Central developers who want their API documentation to include the same field descriptions defined in their AL source code, ensuring consistency between the codebase and API documentation.
+
+**Example AL Integration:**
+```al
+page 50100 "My API Page"
+{
+    PageType = API;
+    EntityName = 'myEntity';
+    
+    layout
+    {
+        area(content)
+        {
+            field(customerNo; Rec."No.")
+            {
+                Description = 'Unique identifier for the customer';
+            }
+            field(customerName; Rec.Name)
+            {
+                Description = 'Full name of the customer';
+            }
+        }
+    }
+}
+```
+
+With `repo-path` configured, these descriptions will automatically appear in your OpenAPI documentation!
 
 ### Interactive HTML Documentation
 
@@ -116,6 +173,79 @@ The action automatically generates an `index.html` file in the same directory as
 - **📖 Scalar Integration**: Interactive API testing with a beautiful, modern interface
 
 Simply open the `index.html` file in any browser to explore your API documentation interactively!
+
+## AL Source Integration Guide
+
+### How It Works
+
+The `repo-path` feature enhances your OpenAPI documentation by extracting field descriptions directly from your Business Central AL source code. Here's how it works:
+
+1. **Repository Scanning**: When `repo-path` is provided, the action scans your repository for AL files in:
+   - `Pages/**/*.al` (API pages)
+   - `queries/**/*.al` (API queries)
+
+2. **API Object Detection**: Identifies AL objects with:
+   - `PageType = API;` or `QueryType = API;`
+   - An `EntityName` property matching your EDMX entities
+
+3. **Field Description Extraction**: Parses field/column definitions to extract `Description` properties:
+   ```al
+   field(fieldName; Rec."Table Field")
+   {
+       Description = 'This description will appear in OpenAPI docs';
+   }
+   ```
+
+4. **Schema Enhancement**: Maps AL descriptions to OpenAPI schema properties using:
+   - Exact field name matching
+   - Case-insensitive fallback matching
+   - Entity name correlation between AL and EDMX
+
+### Repository Structure Requirements
+
+For optimal AL source integration, ensure your Business Central repository follows this structure:
+
+```
+your-bc-repository/
+├── Pages/
+│   ├── API/
+│   │   ├── MyAPIPage.al
+│   │   └── AnotherAPIPage.al
+│   └── ...
+├── queries/
+│   ├── MyAPIQuery.al
+│   └── ...
+└── docs/
+    └── api.xml  # Your EDMX file
+```
+
+### Usage Examples
+
+**Same Repository (Common Case):**
+```yaml
+- name: Convert EDMX with AL Integration
+  uses: attieretief/bc-edmx-to-openapi@v1
+  with:
+    input-path: 'docs/api.xml'
+    output-path: 'docs/api.json'
+    repo-path: '.'  # Current repository
+```
+
+**External Repository:**
+```yaml
+- name: Checkout AL Source Repository
+  uses: actions/checkout@v4
+  with:
+    repository: 'myorg/my-bc-source'
+    path: 'bc-source'
+
+- name: Convert EDMX with External AL Integration
+  uses: attieretief/bc-edmx-to-openapi@v1
+  with:
+    input-path: 'docs/api.xml'
+    output-path: 'docs/api.json'
+    repo-path: 'bc-source'
+```
 
 ## Local Development
 
@@ -133,7 +263,13 @@ chmod +x convert.sh
   --title "My Business Central API" \
   --description "Custom API documentation" \
   --api-name "MyApp" \
-  --api-version "v2.0"
+  --api-version "v2.0" \
+  --repo-path "."
+
+# With AL source integration for enhanced descriptions
+./convert.sh docs/api.xml docs/api-openapi.json \
+  --repo-path "/path/to/bc/repository" \
+  --api-name "MyApp"
 
 # Skip HTML generation
 ./convert.sh docs/api.xml docs/api-openapi.json --no-html
