@@ -580,11 +580,12 @@ This interactive testing feature allows you to explore the API functionality and
         fields = {}
         
         if is_api_page:
-            # Parse page fields - more robust pattern to handle multi-line field definitions
+            # Parse page fields - robust pattern to handle field definitions with parentheses in table field names
             # Look for field(...) { ... Description = '...'; ... }
-            field_pattern = r'field\(([^;]+);\s*[^)]*\)\s*\{[^}]*?Description\s*=\s*[\'"]([^\'"]*)[\'"]'
+            # Fixed: Use [^}]+? instead of [^)]* to handle cases like Rec."Journal Amount (LCY)" 
+            field_pattern = r'field\(([^;]+);[^}]+?\{[^}]*?Description\s*=\s*[\'"]([^\'"]*)[\'"]'
             for match in re.finditer(field_pattern, content, re.DOTALL):
-                field_name = match.group(1).strip()
+                field_name = match.group(1).strip().strip('"')  # Remove quotes from field name
                 description = match.group(2).strip()
                 
                 fields[field_name] = description
@@ -599,12 +600,21 @@ This interactive testing feature allows you to explore the API functionality and
                 fields[column_name] = description
         
         if fields:
+            # Prefer pages over queries when there's a naming conflict
+            # Pages typically have more complete field definitions for API schemas
+            existing = self.al_entities.get(entity_name)
+            if existing and existing['object_type'] == 'page' and not is_api_page:
+                print(f"Skipping query '{entity_name}' - page version already exists with {len(existing['fields'])} fields")
+                return
+                
             self.al_entities[entity_name] = {
                 'source_file': al_file,
                 'fields': fields,
                 'object_type': 'page' if is_api_page else 'query'
             }
             print(f"Found API entity '{entity_name}' with {len(fields)} described fields in {Path(al_file).name}")
+            if existing and existing['object_type'] == 'query' and is_api_page:
+                print(f"  -> Replaced query version (had {len(existing['fields'])} fields) with page version")
 
     def _enhance_schema_descriptions(self, spec: Dict[str, Any]) -> None:
         """Enhance OpenAPI schema field descriptions using AL source descriptions."""
